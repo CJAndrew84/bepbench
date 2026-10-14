@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# Deploy BEP Bench on a RunPod pod.
+#
+# Run it on the pod:
+#   curl -fsSL https://raw.githubusercontent.com/mac999/bepbench/main/deploy/runpod.sh | bash
+# or, if the repo is already cloned:
+#   bash deploy/runpod.sh
+#
+# Idempotent: safe to re-run to update the code and restart the service.
+#
+# Data lives on the persistent volume, so plans and uploaded models survive a
+# pod restart. The app is served with basic authentication, because the RunPod
+# HTTP proxy URL is reachable by anyone who has it and a BEP routinely carries
+# information an appointing party has classified as sensitive.
+
+set -euo pipefail
+
+PORT="${BEP_PORT:-8080}"
+REPO="${BEP_REPO:-https://github.com/mac999/bepbench.git}"
+VOLUME="${BEP_VOLUME:-/workspace}"
+APP_DIR="${BEP_APP_DIR:-$VOLUME/bepbench}"
+DATA_DIR="${BEP_DATA_DIR:-$VOLUME/bep-data}"
+ENV_FILE="$DATA_DIR/service.env"
+
+say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
+warn() { printf '\033[1;33m    %s\033[0m\n' "$*"; }
+
+# ---------------------------------------------------------------- environment
+say "Checking the environment"
+[ -d "$VOLUME" ] || { echo "No volume at $VOLUME. Set BEP_VOLUME."; exit 1; }
+command -v git >/dev/null || { apt-get update -qq && apt-get install -y -qq git; }
+PY="$(command -v python3)"
+echo "    python  $("$PY" --version 2>&1)"
+echo "    volume  $VOLUME  ($(df -h "$VOLUME" | awk 'NR==2{print $4" free of "$2}'))"
+
+# Measured: the dependencies install to about 280 MB, of which ifcopenshell is
+# 180 MB and numpy 57 MB. 1 GB leaves room for that, pip's build cache and a few
+# uploaded models.
+free_mb=$(df -Pm "$VOLUME" | awk 'NR==2{print $4}')
+if [ "$free_mb" -lt 1024 ]; then
+  warn "Only ${free_mb} MB free. The dependencies need about 280 MB installed and"
+  warn "uploaded models go on top. Free some space or expect the install to fail."
+fi
+
+# ---------------------------------------------------------------------- code
+if [ -d "$APP_DIR/.git" ]; then
+  say "Updating the existing checkout"
+  # Never discard work that is not on the remote. This script is also run by
+  # hand against development checkouts, where a hard reset would silently throw
+  # away uncommitted edits.
+  if [ -n "$(git -C "$APP_DIR" status --porcelain)" ]; then
+    warn "$APP_DIR has uncommitted changes; leaving the code untouched."
+    warn "Commit or stash them, or point BEP_APP_DIR somewhere else, to update."
+  else
+    git -C "$APP_DIR" fetch --quiet origin
+    git -C "$APP_DIR" reset --quiet --hard origin/main
+  fi
+elif [ -f "$APP_DIR/pyproject.toml" ]; then
+  # Source copied in by other means (rsync, a volume snapshot). Use it as it is.
+  say "Using the source already at $APP_DIR"
+elif [ -e "$APP_DIR" ] && [ -n "$(ls -A "$APP_DIR" 2>/dev/null)" ]; then
+  echo "$APP_DIR exists, is not a checkout, and holds no pyproject.toml." >&2
+  echo "Move it aside or set BEP_APP_DIR to a free path." >&2
+  exit 1
+else
+  say "Cloning $REPO"
+  git clone --quiet --depth 1 "$REPO" "$APP_DIR"
+fi
+cd "$APP_DIR"
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "    at $(git rev-parse --short HEAD) — $(git log -1 --format=%s)"
+fi
+
+# ------------------------------------------------------------------- packages
+say "Installing dependencies (this is the slow step)"
+# ifcopenshell's geometry kernel needs libgomp at runtime.
+if ! ldconfig -p 2>/dev/null | grep -q libgomp; then
+  apt-get update -qq && apt-get install -y -qq libgomp1
+fi
+"$PY" -m pip install --quiet --upgrade pip
+"$PY" -m pip install --quiet -e ".[all]"
+"$PY" -m pip install --quiet gunicorn
+
+# ------------------------------------------------------------------ settings
+mkdir -p "$DATA_DIR"
+if [ ! -f "$ENV_FILE" ]; then
+  say "Generating credentials"
+  # Written once and kept on the volume, so a redeploy does not change the
+  # password out from under whoever is already using it.
+  {
+    echo "BEP_DATA_DIR=$DATA_DIR"
+    echo "SECRET_KEY=$("$PY" -c 'import secrets; print(secrets.token_hex(32))')"
+    echo "BEP_AUTH_USER=${BEP_AUTH_USER:-bep}"
+    echo "BEP_AUTH_PASSWORD=${BEP_AUTH_PASSWORD:-$("$PY" -c 'import secrets; print(secrets.token_urlsafe(18))')}"
+  } > "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+  echo "    written to $ENV_FILE"
+else
+  echo "    reusing credentials in $ENV_FILE"
+fi
+set -a; . "$ENV_FILE"; set +a
+
+# --------------------------------------------------------------------- sample
+if [ ! -f "$DATA_DIR/bep.sqlite3" ]; then
+  say "Seeding a worked example"
+  bep demo >/dev/null 2>&1 || true
+  bep ifc import riverside-interchange-phase-2 "$APP_DIR/docs/demo/Duplex_A.ifc" \
+      --discipline Architecture >/dev/null 2>&1 || warn "sample model not attached"
+fi
+
+# -------------------------------------------------------------------- service
+say "Starting the service on port $PORT"
+PID_FILE="$DATA_DIR/gunicorn.pid"
+if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+  kill "$(cat "$PID_FILE")" && sleep 2
+fi
+
+cat > "$DATA_DIR/start.sh" <<EOF
+#!/usr/bin/env bash
+# Start BEP Bench. Re-run this after a pod restart.
+set -a; . "$ENV_FILE"; set +a
+cd "$APP_DIR"
+exec gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 300 \\
+  --pid "$PID_FILE" \\
+  --access-logfile "$DATA_DIR/access.log" \\
+  --error-logfile "$DATA_DIR/error.log" \\
+  wsgi:app
+EOF
+chmod +x "$DATA_DIR/start.sh"
+
+nohup "$DATA_DIR/start.sh" >/dev/null 2>&1 &
+for _ in $(seq 1 30); do
+  sleep 1
+  if curl -fsS "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then
+    break
+  fi
+done
+
+# ---------------------------------------------------------------------- report
+say "Result"
+if curl -fsS "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then
+  echo "    service     up on port $PORT"
+  echo "    guarded     $(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/") on / without credentials (401 expected)"
+  echo "    data        $DATA_DIR"
+  echo "    restart     $DATA_DIR/start.sh"
+  echo "    logs        $DATA_DIR/{access,error}.log"
+  echo
+  echo "    Open  https://<POD_ID>-$PORT.proxy.runpod.net"
+  echo "    User  $BEP_AUTH_USER"
+  echo "    Password is in $ENV_FILE — read it there, do not paste it around:"
+  echo "        grep BEP_AUTH_PASSWORD $ENV_FILE"
+else
+  echo "    service failed to start. Last errors:"
+  tail -20 "$DATA_DIR/error.log" 2>/dev/null || echo "    (no log written)"
+  exit 1
+fi

@@ -218,6 +218,10 @@ docker build -t bepbench .
 docker run -p 8080:8080 -v bep-data:/data -e SECRET_KEY=... bepbench
 ```
 
+RunPod: `curl -fsSL https://raw.githubusercontent.com/mac999/bepbench/main/deploy/runpod.sh | bash`
+on the pod, with port 8080 exposed. It puts the data on the persistent volume and turns on
+basic authentication, because the proxy URL is public.
+
 Fly.io config is included (`fly.toml`): a mounted volume at `/data`, a `/healthz` check, and
 suspend-when-idle so an occasional-use instance costs close to nothing. Details and sizing
 guidance in [docs/05-deployment.md](docs/05-deployment.md).

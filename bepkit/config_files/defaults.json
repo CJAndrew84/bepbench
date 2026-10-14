@@ -342,5 +342,10 @@
       "site": "IfcSite",
       "equipment": "IfcBuildingElementProxy"
     }
+  },
+  "auth": {
+    "_comment": "HTTP basic authentication. Off unless both user and password are set, here or via BEP_AUTH_USER / BEP_AUTH_PASSWORD. Needed for any deployment reachable from outside your own machine: the app has no other access control.",
+    "user": "",
+    "password": ""
   }
 }

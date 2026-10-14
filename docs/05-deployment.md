@@ -44,6 +44,29 @@ fly secrets set BEP_CONFIG=/data/config.json
 Think before doing that: the prompt carries the plan's contents, and a BEP for a sensitive
 asset should not leave your own infrastructure.
 
+## RunPod
+
+```bash
+# on the pod
+curl -fsSL https://raw.githubusercontent.com/mac999/bepbench/main/deploy/runpod.sh | bash
+```
+
+The script clones to `/workspace/bepbench`, installs the optional extras, puts the
+database and uploaded models on the persistent volume at `/workspace/bep-data`, and starts
+gunicorn on port 8080. Re-running it updates the code and restarts the service; it refuses
+to touch a checkout with uncommitted changes.
+
+Expose port **8080** under *Expose HTTP Ports* when creating the pod — RunPod fixes the
+HTTP port list at creation time, so adding one later means a new pod.
+
+**The proxy URL is public.** Anyone holding `https://<pod-id>-8080.proxy.runpod.net` can
+reach the service, so the script generates a password and turns on basic authentication.
+It is written once to `/workspace/bep-data/service.env` and reused on redeploy. Read it
+with `grep BEP_AUTH_PASSWORD /workspace/bep-data/service.env`.
+
+After a pod restart the container starts fresh: run `/workspace/bep-data/start.sh` to bring
+the service back. The data is already on the volume.
+
 ## Any other host
 
 The image is an ordinary Python web app:

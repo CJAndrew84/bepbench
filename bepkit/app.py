@@ -19,6 +19,10 @@ def create_app(testing: bool = False) -> Flask:
 
     db.init_app(app)
 
+    from .web.auth import init_app as init_auth
+
+    init_auth(app)
+
     from .web.api import api_bp
     from .web.views import web_bp
 
