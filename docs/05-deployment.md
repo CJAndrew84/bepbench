@@ -51,13 +51,30 @@ asset should not leave your own infrastructure.
 curl -fsSL https://raw.githubusercontent.com/mac999/bepbench/main/deploy/runpod.sh | bash
 ```
 
-The script clones to `/workspace/bepbench`, installs the optional extras, puts the
-database and uploaded models on the persistent volume at `/workspace/bep-data`, and starts
-gunicorn on port 8080. Re-running it updates the code and restarts the service; it refuses
-to touch a checkout with uncommitted changes.
+The script clones to `/workspace/bepbench`, installs into a virtualenv at
+`/workspace/venv`, keeps the database and uploaded models in `/workspace/bep-data`, and
+starts gunicorn on port 8080. Re-running it updates the code and restarts the service; it
+refuses to touch a checkout with uncommitted changes.
+
+It installs into a virtualenv rather than the system interpreter because Ubuntu 24.04
+will not let pip replace distro packages — Flask needs a newer `blinker` than Debian ships,
+and the Debian one has no `RECORD` file so pip cannot uninstall it. `--break-system-packages`
+does not help.
+
+**`/workspace` is only persistent if the pod has a network volume mounted there.** Without
+one it is container disk: it survives a restart but not terminating the pod. The script
+says so when it sees that, and `bep export <plan> --format json` is the way to take plans
+out.
 
 Expose port **8080** under *Expose HTTP Ports* when creating the pod — RunPod fixes the
-HTTP port list at creation time, so adding one later means a new pod.
+HTTP port list at creation time, so adding one later means a new pod. If only the template's
+default 8888 is exposed, `BEP_PORT=8888` serves on that instead, after stopping JupyterLab
+(`pkill -f jupyter-lab`).
+
+The pod's own SSH only accepts keys registered under **Settings → SSH Public Keys** before
+the pod starts; the whole line including the `ssh-ed25519` prefix. The `ssh.runpod.io`
+proxy route gives an interactive shell and ignores a command passed as an argument, so
+scripted use needs the command on stdin.
 
 **The proxy URL is public.** Anyone holding `https://<pod-id>-8080.proxy.runpod.net` can
 reach the service, so the script generates a password and turns on basic authentication.

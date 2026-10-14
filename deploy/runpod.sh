@@ -20,6 +20,7 @@ REPO="${BEP_REPO:-https://github.com/mac999/bepbench.git}"
 VOLUME="${BEP_VOLUME:-/workspace}"
 APP_DIR="${BEP_APP_DIR:-$VOLUME/bepbench}"
 DATA_DIR="${BEP_DATA_DIR:-$VOLUME/bep-data}"
+VENV="${BEP_VENV:-$VOLUME/venv}"
 ENV_FILE="$DATA_DIR/service.env"
 
 say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -32,6 +33,13 @@ command -v git >/dev/null || { apt-get update -qq && apt-get install -y -qq git;
 PY="$(command -v python3)"
 echo "    python  $("$PY" --version 2>&1)"
 echo "    volume  $VOLUME  ($(df -h "$VOLUME" | awk 'NR==2{print $4" free of "$2}'))"
+
+# A pod created without a network volume still has /workspace — as container
+# disk, which is discarded when the pod is terminated.
+if ! mountpoint -q "$VOLUME" 2>/dev/null; then
+  warn "$VOLUME is container disk, not a mounted volume: plans and uploaded"
+  warn "models will not survive terminating the pod. Export anything you keep."
+fi
 
 # Measured: the dependencies install to about 280 MB, of which ifcopenshell is
 # 180 MB and numpy 57 MB. 1 GB leaves room for that, pip's build cache and a few
@@ -77,9 +85,17 @@ say "Installing dependencies (this is the slow step)"
 if ! ldconfig -p 2>/dev/null | grep -q libgomp; then
   apt-get update -qq && apt-get install -y -qq libgomp1
 fi
-"$PY" -m pip install --quiet --upgrade pip
-"$PY" -m pip install --quiet -e ".[all]"
-"$PY" -m pip install --quiet gunicorn
+# Install into a virtualenv. On Ubuntu 24.04 pip refuses to replace distro
+# packages (Flask needs a newer blinker than Debian's, which has no RECORD
+# file and so cannot be uninstalled), and --break-system-packages does not
+# help. A venv avoids the argument entirely.
+if [ ! -x "$VENV/bin/python" ]; then
+  "$PY" -m venv --help >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq python3-venv; }
+  "$PY" -m venv "$VENV"
+fi
+"$VENV/bin/pip" install --quiet --upgrade pip
+"$VENV/bin/pip" install --quiet -e ".[all]" gunicorn
+echo "    venv    $VENV"
 
 # ------------------------------------------------------------------ settings
 mkdir -p "$DATA_DIR"
@@ -89,9 +105,9 @@ if [ ! -f "$ENV_FILE" ]; then
   # password out from under whoever is already using it.
   {
     echo "BEP_DATA_DIR=$DATA_DIR"
-    echo "SECRET_KEY=$("$PY" -c 'import secrets; print(secrets.token_hex(32))')"
+    echo "SECRET_KEY=$("$VENV/bin/python" -c 'import secrets; print(secrets.token_hex(32))')"
     echo "BEP_AUTH_USER=${BEP_AUTH_USER:-bep}"
-    echo "BEP_AUTH_PASSWORD=${BEP_AUTH_PASSWORD:-$("$PY" -c 'import secrets; print(secrets.token_urlsafe(18))')}"
+    echo "BEP_AUTH_PASSWORD=${BEP_AUTH_PASSWORD:-$("$VENV/bin/python" -c 'import secrets; print(secrets.token_urlsafe(18))')}"
   } > "$ENV_FILE"
   chmod 600 "$ENV_FILE"
   echo "    written to $ENV_FILE"
@@ -103,8 +119,8 @@ set -a; . "$ENV_FILE"; set +a
 # --------------------------------------------------------------------- sample
 if [ ! -f "$DATA_DIR/bep.sqlite3" ]; then
   say "Seeding a worked example"
-  bep demo >/dev/null 2>&1 || true
-  bep ifc import riverside-interchange-phase-2 "$APP_DIR/docs/demo/Duplex_A.ifc" \
+  "$VENV/bin/bep" demo >/dev/null 2>&1 || true
+  "$VENV/bin/bep" ifc import riverside-interchange-phase-2 "$APP_DIR/docs/demo/Duplex_A.ifc" \
       --discipline Architecture >/dev/null 2>&1 || warn "sample model not attached"
 fi
 
@@ -129,7 +145,7 @@ cat > "$DATA_DIR/start.sh" <<EOF
 # Start BEP Bench. Re-run this after a pod restart.
 set -a; . "$ENV_FILE"; set +a
 cd "$APP_DIR"
-exec gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 300 \\
+exec "$VENV/bin/gunicorn" --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 300 \\
   --pid "$PID_FILE" \\
   --access-logfile "$DATA_DIR/access.log" \\
   --error-logfile "$DATA_DIR/error.log" \\
