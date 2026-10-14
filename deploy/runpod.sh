@@ -115,6 +115,15 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
   kill "$(cat "$PID_FILE")" && sleep 2
 fi
 
+# Something else on the port fails deep inside gunicorn with an unhelpful
+# message. On a RunPod pod that something is usually JupyterLab on 8888.
+if command -v curl >/dev/null && curl -fsS --max-time 2 "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
+  echo "Port $PORT is already serving something else." >&2
+  echo "Free it, or pick another with BEP_PORT=<port>." >&2
+  echo "On a RunPod pod, port 8888 is JupyterLab: stop it first if you mean to replace it." >&2
+  exit 1
+fi
+
 cat > "$DATA_DIR/start.sh" <<EOF
 #!/usr/bin/env bash
 # Start BEP Bench. Re-run this after a pod restart.
