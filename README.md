@@ -9,6 +9,15 @@ side by side with the IFC model it governs.
 
 ![Workspace](docs/demo/img/workspace.png)
 
+### Try it — live demo
+
+**<https://9jsmyi0kzvzw7p-8888.proxy.runpod.net/>** — a running instance with the sample
+plan and the Duplex Apartment model already loaded. No login.
+
+It runs on a metered pod, so it is stopped from time to time to keep the cost down. If the
+link does not answer, [open an issue](https://github.com/mac999/bepbench/issues) and I will
+start it. Treat it as a demo: anyone can edit it, and the data is not kept.
+
 Everything runs on your own machine. The default model provider is a local Ollama, because
 an ISO 19650-5 triage routinely classifies an asset as sensitive — which rules out pasting
 the plan into a hosted LLM.
