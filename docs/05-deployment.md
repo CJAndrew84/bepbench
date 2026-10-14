@@ -89,8 +89,17 @@ credentials, so a redeploy will not quietly put the login back:
 curl -fsSL .../deploy/runpod.sh | BEP_NO_AUTH=1 bash
 ```
 
-After a pod restart the container starts fresh: run `/workspace/bep-data/start.sh` to bring
-the service back. The data is already on the volume.
+A pod restart starts the container fresh, so the service needs bringing back. The script
+installs `/pre_start.sh`, the hook the pod template already runs, which detaches
+`/workspace/bep-data/autostart.sh` and returns immediately — **that hook runs before sshd,
+so anything slow in it delays SSH and can leave the pod unreachable.**
+
+On port 8888 the helper also waits for the template to start JupyterLab, stops it, and
+takes the port. Jupyter is started from `/start.sh` *after* the hook, so waiting for the
+port up front would be racing a process that does not exist yet.
+
+To bring it up by hand: `/workspace/bep-data/start.sh`. The log is
+`/workspace/bep-data/autostart.log`.
 
 ## Any other host
 

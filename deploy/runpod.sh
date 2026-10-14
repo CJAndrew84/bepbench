@@ -162,6 +162,46 @@ exec "$VENV/bin/gunicorn" --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout
 EOF
 chmod +x "$DATA_DIR/start.sh"
 
+# Survive a pod restart. The template's /start.sh runs /pre_start.sh if it
+# exists, so that is the hook — but it runs *before* sshd, so anything slow
+# there delays SSH and can leave the pod unreachable. The hook therefore only
+# detaches a helper and returns.
+cat > "$DATA_DIR/autostart.sh" <<EOF
+#!/usr/bin/env bash
+# Bring BEP Bench up after the container starts.
+exec >>"$DATA_DIR/autostart.log" 2>&1
+echo "=== \$(date -Is) autostart ==="
+EOF
+if [ "$PORT" = "8888" ]; then
+  # The template starts JupyterLab on 8888 after this hook has run, so wait for
+  # it to appear and take the port back rather than racing something that does
+  # not exist yet.
+  cat >> "$DATA_DIR/autostart.sh" <<EOF
+for _ in \$(seq 1 30); do pgrep -f jupyter-lab >/dev/null && break; sleep 1; done
+pkill -f jupyter-lab 2>/dev/null && echo "stopped JupyterLab"
+for _ in \$(seq 1 20); do ss -ltn 2>/dev/null | grep -q ":$PORT " || break; sleep 1; done
+EOF
+fi
+cat >> "$DATA_DIR/autostart.sh" <<EOF
+echo "starting bepbench"
+exec "$DATA_DIR/start.sh"
+EOF
+chmod +x "$DATA_DIR/autostart.sh"
+
+if [ -w / ]; then
+  cat > /pre_start.sh <<EOF
+#!/usr/bin/env bash
+# Pod template hook. Runs before sshd, so it must return at once.
+setsid nohup "$DATA_DIR/autostart.sh" </dev/null >/dev/null 2>&1 &
+exit 0
+EOF
+  chmod +x /pre_start.sh
+  echo "    autostart installed at /pre_start.sh"
+else
+  warn "cannot write /pre_start.sh; the service will not come back after a restart."
+  warn "Start it by hand with $DATA_DIR/start.sh"
+fi
+
 nohup "$DATA_DIR/start.sh" >/dev/null 2>&1 &
 for _ in $(seq 1 30); do
   sleep 1
