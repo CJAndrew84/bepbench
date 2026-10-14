@@ -100,19 +100,28 @@ echo "    venv    $VENV"
 # ------------------------------------------------------------------ settings
 mkdir -p "$DATA_DIR"
 if [ ! -f "$ENV_FILE" ]; then
-  say "Generating credentials"
-  # Written once and kept on the volume, so a redeploy does not change the
+  say "Generating settings"
+  # Written once and kept with the data, so a redeploy does not change the
   # password out from under whoever is already using it.
   {
     echo "BEP_DATA_DIR=$DATA_DIR"
     echo "SECRET_KEY=$("$VENV/bin/python" -c 'import secrets; print(secrets.token_hex(32))')"
-    echo "BEP_AUTH_USER=${BEP_AUTH_USER:-bep}"
-    echo "BEP_AUTH_PASSWORD=${BEP_AUTH_PASSWORD:-$("$VENV/bin/python" -c 'import secrets; print(secrets.token_urlsafe(18))')}"
+    # BEP_NO_AUTH=1 serves the pod openly. Reasonable when the plans on it are
+    # throwaway; the proxy URL is reachable by anyone who has it.
+    if [ "${BEP_NO_AUTH:-0}" != "1" ]; then
+      echo "BEP_AUTH_USER=${BEP_AUTH_USER:-bep}"
+      echo "BEP_AUTH_PASSWORD=${BEP_AUTH_PASSWORD:-$("$VENV/bin/python" -c 'import secrets; print(secrets.token_urlsafe(18))')}"
+    fi
   } > "$ENV_FILE"
   chmod 600 "$ENV_FILE"
   echo "    written to $ENV_FILE"
 else
-  echo "    reusing credentials in $ENV_FILE"
+  echo "    reusing settings in $ENV_FILE"
+  # An existing file is authoritative: someone may have turned auth off by hand.
+  if [ "${BEP_NO_AUTH:-0}" = "1" ] && grep -q '^BEP_AUTH_USER=' "$ENV_FILE"; then
+    sed -i '/^BEP_AUTH_USER=/d; /^BEP_AUTH_PASSWORD=/d' "$ENV_FILE"
+    echo "    BEP_NO_AUTH=1 — removed the stored credentials"
+  fi
 fi
 set -a; . "$ENV_FILE"; set +a
 
@@ -165,15 +174,25 @@ done
 say "Result"
 if curl -fsS "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then
   echo "    service     up on port $PORT"
-  echo "    guarded     $(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/") on / without credentials (401 expected)"
+  code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/")
+  if grep -q '^BEP_AUTH_USER=' "$ENV_FILE"; then
+    echo "    auth        on — / returns $code without credentials (401 expected)"
+  else
+    echo "    auth        off — / returns $code to anyone (200 expected)"
+  fi
   echo "    data        $DATA_DIR"
   echo "    restart     $DATA_DIR/start.sh"
   echo "    logs        $DATA_DIR/{access,error}.log"
   echo
+  echo
   echo "    Open  https://<POD_ID>-$PORT.proxy.runpod.net"
-  echo "    User  $BEP_AUTH_USER"
-  echo "    Password is in $ENV_FILE — read it there, do not paste it around:"
-  echo "        grep BEP_AUTH_PASSWORD $ENV_FILE"
+  if grep -q '^BEP_AUTH_USER=' "$ENV_FILE"; then
+    echo "    User  $(grep '^BEP_AUTH_USER=' "$ENV_FILE" | cut -d= -f2)"
+    echo "    Password is in $ENV_FILE — read it there, do not paste it around:"
+    echo "        grep BEP_AUTH_PASSWORD $ENV_FILE"
+  else
+    echo "    No authentication: anyone with that URL can read and edit the plans."
+  fi
 else
   echo "    service failed to start. Last errors:"
   tail -20 "$DATA_DIR/error.log" 2>/dev/null || echo "    (no log written)"

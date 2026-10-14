@@ -77,9 +77,17 @@ proxy route gives an interactive shell and ignores a command passed as an argume
 scripted use needs the command on stdin.
 
 **The proxy URL is public.** Anyone holding `https://<pod-id>-8080.proxy.runpod.net` can
-reach the service, so the script generates a password and turns on basic authentication.
-It is written once to `/workspace/bep-data/service.env` and reused on redeploy. Read it
-with `grep BEP_AUTH_PASSWORD /workspace/bep-data/service.env`.
+reach the service, so by default the script generates a password and turns on basic
+authentication. It is written once to `/workspace/bep-data/service.env` and reused on
+redeploy. Read it with `grep BEP_AUTH_PASSWORD /workspace/bep-data/service.env`.
+
+To serve openly — reasonable when the plans on that pod are throwaway — set
+`BEP_NO_AUTH=1`. On a pod already running with a password it removes the stored
+credentials, so a redeploy will not quietly put the login back:
+
+```bash
+curl -fsSL .../deploy/runpod.sh | BEP_NO_AUTH=1 bash
+```
 
 After a pod restart the container starts fresh: run `/workspace/bep-data/start.sh` to bring
 the service back. The data is already on the volume.
