@@ -276,6 +276,10 @@ or a network.
 BS EN ISO 19650-1/-2/-5 · NBIMS-US v4 · Penn State BIM PxP Guide v2.2 · EN 17412-1 ·
 BIMForum LOD Specification · buildingSMART IDS 1.0 · IFC2X3 / IFC4
 
+## Acknowledge
+
+Thanks for Duplex Apartment IFC model supported by Thomas Liebich and updated by Dr. Shawn O'Keeffe. 
+
 ## Licence
 
 MIT
