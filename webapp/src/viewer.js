@@ -6,14 +6,13 @@ export async function mountViewer(container, project, defaults, schemas, onStatu
   const canvasHost = container.querySelector('.model-canvas'), info = container.querySelector('.model-info'), tree = container.querySelector('.object-tree'), props = container.querySelector('.element-properties');
   let renderer;
   try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false }); }
-  catch { canvasHost.textContent = '3D viewing needs WebGL in this browser. Your plan can still be edited and exported.'; return { dispose() {} }; }
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.localClippingEnabled = true;
-  canvasHost.append(renderer.domElement);
+  catch { canvasHost.textContent = '3D viewing needs WebGL in this browser. Open an IFC to inspect its element list and properties below.'; }
+  if (renderer) { renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.localClippingEnabled = true; canvasHost.append(renderer.domElement); }
   const scene = new THREE.Scene(); scene.background = new THREE.Color('#e9ede8');
   const camera = new THREE.PerspectiveCamera(42, 1, .01, 100000), group = new THREE.Group(); scene.add(group);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x778779, 2.4));
   const light = new THREE.DirectionalLight(0xffffff, 2); light.position.set(10, 20, 10); scene.add(light);
-  const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+  const controls = renderer ? new OrbitControls(camera, renderer.domElement) : null; if (controls) controls.enableDamping = true;
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(), clipping = new THREE.Plane(new THREE.Vector3(0, -1, 0), 1e10);
   let worker, selected, items = [], meshes = [], box, alive = true, raf, currentId, dragStart;
   const allClasses = Object.values(schemas).flat(), canonical = cls => allClasses.find(c => c.toUpperCase() === cls) || cls;
@@ -23,10 +22,10 @@ export async function mountViewer(container, project, defaults, schemas, onStatu
     const distance = Math.max(size.x, size.y, size.z, 1) * 1.8;
     camera.position.copy(center).add(new THREE.Vector3(distance, distance * .7, distance));
     camera.near = Math.max(distance / 10000, .001); camera.far = distance * 100; camera.updateProjectionMatrix();
-    controls.target.copy(center); controls.update();
+    if (controls) { controls.target.copy(center); controls.update(); }
   };
-  const resize = new ResizeObserver(() => { const { width, height } = canvasHost.getBoundingClientRect(); renderer.setSize(Math.max(width, 1), Math.max(height, 1)); camera.aspect = width / Math.max(height, 1); camera.updateProjectionMatrix(); }); resize.observe(canvasHost);
-  function render() { if (!alive) return; raf = requestAnimationFrame(render); controls.update(); renderer.render(scene, camera); } render();
+  const resize = new ResizeObserver(() => { const { width, height } = canvasHost.getBoundingClientRect(); if (renderer) renderer.setSize(Math.max(width, 1), Math.max(height, 1)); camera.aspect = width / Math.max(height, 1); camera.updateProjectionMatrix(); }); resize.observe(canvasHost);
+  function render() { if (!alive || !renderer) return; raf = requestAnimationFrame(render); controls.update(); renderer.render(scene, camera); } render();
   function clear() { for (const m of meshes) { m.geometry.dispose(); m.material.dispose(); } meshes = []; group.clear(); selected = null; }
   function filter() {
     const cls = container.querySelector('[name="ifc-class"]').value, mode = container.querySelector('[name="ifc-mode"]').value, lod = container.querySelector('[name="ifc-lod"]').value;
@@ -50,7 +49,7 @@ export async function mountViewer(container, project, defaults, schemas, onStatu
     if (buffer.byteLength > 200 * 1024 * 1024) throw new Error('The browser viewer accepts IFC files up to 200 MB. Use the native Python app for larger models.');
     const previous = worker; previous?.terminate();
     info.textContent = `Opening ${filename}…`; props.innerHTML = ''; tree.innerHTML = ''; clear();
-    if (persist) await saveModel(project.slug, { filename, buffer: buffer.slice(0) });
+    const sourceBuffer = persist ? buffer.slice(0) : null;
     worker = new Worker(new URL('./ifc-worker.js', import.meta.url), { type: 'module' });
     worker.onerror = () => { if (alive) info.textContent = 'The model worker stopped. Try a smaller IFC file or use the native Python app.'; };
     worker.onmessage = ({ data }) => {
@@ -58,6 +57,7 @@ export async function mountViewer(container, project, defaults, schemas, onStatu
       if (data.type === 'progress') info.textContent = data.message;
       if (data.type === 'error') { info.textContent = `IFC: ${data.message}`; onStatus(data.message, true); }
       if (data.type === 'model') {
+        if (sourceBuffer) saveModel(project.slug, { filename, buffer: sourceBuffer }).catch(error => onStatus(`Model opened but could not be saved: ${error.message}`, true));
         items = data.elements; const byId = new Map(items.map(i => [i.id, i]));
         for (const g of data.geometries) {
           const interleaved = new THREE.InterleavedBuffer(g.vertices, 6), geometry = new THREE.BufferGeometry();
@@ -67,7 +67,7 @@ export async function mountViewer(container, project, defaults, schemas, onStatu
         }
         const classes = [...new Set(items.map(i => i.cls))].sort();
         container.querySelector('[name="ifc-class"]').innerHTML = '<option value="">All element classes</option>' + classes.map(c => `<option value="${escape(c)}">${escape(canonical(c))}</option>`).join('');
-        info.textContent = `${filename} · ${data.schema} · ${items.length.toLocaleString()} elements${data.truncated ? ' · DISPLAY LIMITED TO 20,000 ELEMENTS' : ''}`;
+        info.textContent = `${filename} · ${data.schema} · ${items.length.toLocaleString()} elements${data.truncated ? ' · DISPLAY LIMITED TO 20,000 ELEMENTS' : ''}${renderer ? '' : ' · 3D unavailable; element properties available'}`;
         fit(); filter();
       }
       if (data.type === 'properties' && data.id === currentId) {
@@ -79,8 +79,8 @@ export async function mountViewer(container, project, defaults, schemas, onStatu
     };
     worker.postMessage({ type: 'open', buffer }, [buffer]);
   }
-  renderer.domElement.addEventListener('pointerdown', e => dragStart = [e.clientX, e.clientY]);
-  renderer.domElement.addEventListener('pointerup', e => {
+  renderer?.domElement.addEventListener('pointerdown', e => dragStart = [e.clientX, e.clientY]);
+  renderer?.domElement.addEventListener('pointerup', e => {
     if (!dragStart || Math.hypot(e.clientX - dragStart[0], e.clientY - dragStart[1]) > 5) return;
     const r = renderer.domElement.getBoundingClientRect(); pointer.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); raycaster.setFromCamera(pointer, camera);
     const hit = raycaster.intersectObjects(meshes).find(h => h.object.visible); if (hit) select(hit.object.userData.id);
@@ -90,7 +90,7 @@ export async function mountViewer(container, project, defaults, schemas, onStatu
   container.querySelector('[data-fit]').onclick = fit;
   container.querySelector('[name="ifc-section"]').oninput = e => { if (box) clipping.constant = box.max.y - (box.max.y - box.min.y) * Number(e.target.value) / 100 + .001; };
   container.querySelector('[data-open-demo]').onclick = () => fetch('/demo.ifc').then(r => { if (!r.ok) throw new Error('Sample model unavailable.'); return r.arrayBuffer(); }).then(b => open(b, 'Duplex_A.ifc', true)).catch(e => onStatus(e.message, true));
-  container.querySelector('[name="ifc-file"]').onchange = async e => { try { const file = e.target.files[0]; if (file) await open(await file.arrayBuffer(), file.name, true); } catch (error) { onStatus(error.message, true); } };
+  container.querySelector('[name="ifc-file"]').onchange = async e => { try { const file = e.target.files[0]; if (file?.size > 200 * 1024 * 1024) throw new Error('The browser viewer accepts IFC files up to 200 MB.'); if (file) await open(await file.arrayBuffer(), file.name, true); } catch (error) { onStatus(error.message, true); } };
   getModel(project.slug).then(model => { if (alive && model) return open(model.buffer, model.filename); }).catch(e => onStatus(e.message, true));
-  return { dispose() { alive = false; worker?.terminate(); cancelAnimationFrame(raf); resize.disconnect(); controls.dispose(); clear(); renderer.dispose(); renderer.forceContextLoss(); } };
+  return { dispose() { alive = false; worker?.terminate(); cancelAnimationFrame(raf); resize.disconnect(); controls?.dispose(); clear(); renderer?.dispose(); renderer?.forceContextLoss(); } };
 }

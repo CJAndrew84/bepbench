@@ -21,6 +21,8 @@ the plan into a hosted LLM.
 
 This fork also includes a browser workspace that can be built and hosted on Netlify:
 
+**[Open the browser workspace](https://bepbench.netlify.app/)**
+
 ```bash
 npm ci
 npm run generate

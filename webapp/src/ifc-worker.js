@@ -1,4 +1,5 @@
 import { IfcAPI } from 'web-ifc';
+import { elementProperties } from './ifc-properties.js';
 let api, modelID;
 const val = x => x?.value ?? x ?? '';
 self.onmessage = async ({ data }) => {
@@ -27,10 +28,7 @@ self.onmessage = async ({ data }) => {
       });
       self.postMessage({ type: 'model', schema: api.GetModelSchema(modelID), elements, geometries, truncated }, geometries.flatMap(g => [g.vertices.buffer, g.indices.buffer]));
     } else if (data.type === 'properties') {
-      const line = api.GetLine(modelID, data.id), attributes = {};
-      for (const key of ['GlobalId', 'Name', 'Description', 'ObjectType', 'Tag', 'PredefinedType']) if (line[key] != null) attributes[key] = String(val(line[key]));
-      const psets = await api.properties.getPropertySets(modelID, data.id, true, true);
-      const properties = psets.map(ps => ({ name: String(val(ps.Name)), values: Object.fromEntries((ps.HasProperties || ps.Quantities || []).map(p => [String(val(p.Name)), String(val(p.NominalValue ?? p.LengthValue ?? p.AreaValue ?? p.VolumeValue ?? p.CountValue ?? p.WeightValue ?? p.Description))])) }));
+      const { attributes, properties } = await elementProperties(api, modelID, data.id);
       self.postMessage({ type: 'properties', id: data.id, attributes, properties });
     }
   } catch (error) { self.postMessage({ type: 'error', message: error.message || String(error) }); }

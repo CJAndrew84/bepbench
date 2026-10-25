@@ -37,6 +37,7 @@ either edition. `.netlify/` is ignored because linking writes local site state t
 | IFC viewing | web-ifc in a worker; Three.js, orbit/pan/zoom, class/search/LOD display filters, section cut, element properties |
 | IFC attachment | One locally retained IFC per plan; opening another replaces it |
 | IFC limits | 200 MB input; 20,000 displayed elements; device memory may impose a lower practical limit |
+| No WebGL | IFC loading, element search and property inspection remain available; 3D requires WebGL |
 | Full model IDS validation | Use the Python CLI and ifctester |
 | AI drafting | Use the Python app with an approved local/provider endpoint |
 | Shared access, login and synchronisation | Not implemented; this edition is a personal device workspace |
@@ -65,6 +66,13 @@ rejection, import validation, escaping, IDS schema filtering and document genera
 Generated Word files are independently opened with python-docx; generated IDS is
 validated with ifctester's IDS XSD. UI and model behaviour also need live browser checks.
 
+Live verification on 25 October 2026 confirmed example creation, edit/save/reload,
+snapshot creation, comparison and restore with an automatic recovery snapshot, and
+JSON download. The bundled IFC parsed to 215 displayed elements and door properties
+were inspected. The cloud test browser lacks WebGL, so interactive 3D rendering could
+not be visually verified there. A real-file regression checks both instance and type
+property sets, including `Pset_DoorCommon`. The browser test suite has 38 passing tests.
+
 To refresh the reference fixtures after an intentional Python scoring change:
 
 ```bash
@@ -86,3 +94,9 @@ The CSP permits same-origin assets and WebAssembly compilation for web-ifc, and
 blocks external network connections from the app. Heavy IFC and Word modules are
 loaded when their features are used. Dependency licence notices are served at
 `/third-party-notices.txt`.
+
+The initial site at <https://bepbench.netlify.app/> was published as a manual deploy
+from the verified `dist` build. Automatic Git deployments are not connected: Netlify's
+Git integration requires a separate GitHub browser sign-in. The source branch is
+`codex/netlify-browser-edition-20261025`. For manual updates, upload a ZIP containing
+the **contents** of `dist`; `_headers` and `_redirects` are included in that directory.
