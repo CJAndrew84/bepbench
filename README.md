@@ -17,6 +17,29 @@ Everything runs on your own machine. The default model provider is a local Ollam
 an ISO 19650-5 triage routinely classifies an asset as sensitive — which rules out pasting
 the plan into a hosted LLM.
 
+### Netlify browser edition (this fork)
+
+This fork also includes a browser workspace that can be built and hosted on Netlify:
+
+**[Open the browser workspace](https://bepbench.netlify.app/)**
+
+```bash
+npm ci
+npm run generate
+npm run dev
+npm test
+npm run build
+```
+
+It uses the original YAML frameworks, with live scoring, local plan storage,
+snapshots, Word/JSON/Markdown/HTML/IDS export, and local IFC viewing. Plans are saved
+in the current browser's IndexedDB; export JSON to back them up or move devices.
+JSON backups contain the current plan, not snapshot history or attached IFC files.
+Use the Python edition for AI drafting and full ifctester model validation.
+
+See [Netlify setup and capability details](docs/08-netlify.md) and the
+[source review](docs/09-fork-review.md). The original Python app below is retained.
+
 ---
 
 ## What it does

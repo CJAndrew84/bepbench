@@ -1,0 +1,20 @@
+name: Netlify browser edition
+on:
+  push:
+    paths: ['webapp/**', 'bepkit/frameworks/**', 'bepkit/config_files/**', 'package*.json', 'netlify.toml', '.github/workflows/webapp.yml']
+  pull_request:
+    paths: ['webapp/**', 'bepkit/frameworks/**', 'bepkit/config_files/**', 'package*.json', 'netlify.toml', '.github/workflows/webapp.yml']
+permissions:
+  contents: read
+jobs:
+  webapp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
