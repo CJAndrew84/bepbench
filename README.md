@@ -272,6 +272,7 @@ bepkit/
 | [Roadmap](docs/06-roadmap.md) | Measured scaling limits and what to build next |
 | [Standards](docs/07-standards.md) | How BEP, LOIN, IDS, IFC and MVD relate, and where this tool draws its lines |
 | [Progress](docs/progress.md) | What exists, what was measured, what is known to be missing |
+| [Revision history](CHANGELOG.md) | What changed, release by release |
 
 ## Tests
 
