@@ -28,7 +28,8 @@ PLACEHOLDER_TOKENS = {
 }
 
 # Credit for answering at all, before depth is taken into account (configurable).
-PRESENCE_FLOOR = float(setting("scoring.presence_floor", 0.35))
+def _presence_floor() -> float:
+    return float(setting("scoring.presence_floor", 0.35))
 
 
 def normalise(value: Any) -> str:
@@ -54,7 +55,8 @@ def _ramp(actual: float, expected: float) -> float:
     """Presence floor plus a linear ramp to full credit at ``expected``."""
     if expected <= 0:
         return 1.0
-    return min(1.0, PRESENCE_FLOOR + (1.0 - PRESENCE_FLOOR) * (actual / expected))
+    floor = _presence_floor()
+    return min(1.0, floor + (1.0 - floor) * (actual / expected))
 
 
 def is_empty(field: Field, value: Any) -> bool:
@@ -172,7 +174,8 @@ def score_field(section_id: str, field: Field, value: Any) -> FieldScore:
             cells = filled_cells / total if total else 0.0
         else:
             cells = 1.0
-        score = depth * (PRESENCE_FLOOR + (1 - PRESENCE_FLOOR) * cells if cells < 1 else 1.0)
+        floor = _presence_floor()
+        score = depth * (floor + (1 - floor) * cells if cells < 1 else 1.0)
         details = []
         if q.min_rows and len(rows) < q.min_rows:
             details.append(f"{len(rows)} of about {q.min_rows} expected rows")

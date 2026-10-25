@@ -10,6 +10,12 @@ in this order, each winning over the last:
 1. `$BEP_CONFIG` — a JSON file, or a directory of `*.json` files applied in name order
 2. `./bep.config.json` in the working directory
 3. `<data dir>/config.json` — the deployed instance's own settings
+4. `bep --set key=value` — this run only, repeatable, applied last
+
+`--set` replaces the value at that path instead of merging into it, and reads the value as
+JSON when it parses: `--set ids.min_occurs=1` is a number, `--set ids.ifc_version='["IFC4"]'`
+a list, `--set ai.model=qwen3:8b` a string. Every key in this document can be set this way,
+so a CI job can change any setting without a config file.
 
 `bep config` prints what is in force and where it came from; `bep config --json` prints the
 whole merged document. A malformed override is reported and skipped, never fatal.
@@ -81,6 +87,36 @@ To make a framework of your own drive the viewer, add an entry to `lod.sections`
 
 Raising `ready_score` makes the gate stricter for everyone; it is the single most useful knob
 for an organisation that wants a house standard above the framework minimum.
+
+## `ids`
+
+The IDS export and the model check. The common keys also have their own option, with the
+same name, on `bep ids export`, `bep ids check` and the HTTP API.
+
+| Key | Option | Meaning |
+| --- | --- | --- |
+| `ids.ifc_version` | `--ifc-version` | Target schemas for an export (default IFC2X3, IFC4) |
+| `ids.ifc_version_from_model` | | Check each model in its own schema (default true) |
+| `ids.schema_aliases` | | What a file header says, mapped to the IDS schema name |
+| `ids.milestone` | `--milestone` | Export or check only this milestone's rows; empty means all |
+| `ids.default_pset` | `--default-pset` | Property set for a property written without one |
+| `ids.pset_separator` | | Separator in `Pset_DoorCommon.FireRating` (default `.`) |
+| `ids.property_split` | | Pattern that splits the table's property list |
+| `ids.data_type` | | IFC data type required of each property (default `IFCLABEL`) |
+| `ids.required_attributes` | | Attributes every element must carry (default `Name`) |
+| `ids.min_occurs`, `ids.max_occurs` | | Cardinality of each specification |
+| `ids.identifier_format` | | Specification id, e.g. `LOIN-{index:03d}` |
+| `ids.title_format`, `ids.description_format`, `ids.document_version` | | Document header |
+| `ids.filename`, `ids.split_filename` | | Download and `--split` file names |
+| `ids.classification_split`, `ids.classification_max_length` | | How the classification system name is cut from the plan's text |
+| `ids.sources.<framework>` | | Which table holds the LOIN, its columns, and where the classification is |
+| `ids.class_hints` | | Words in an element name mapped to an IFC class when none is stated |
+
+## `cli`
+
+| Key | Meaning |
+| --- | --- |
+| `cli.config_summary_keys` | The settings `bep config` prints in its summary |
 
 ## Adding a framework
 

@@ -300,6 +300,17 @@ sections:
           responsible: 담당
           milestone: 기한
       cobie_strategy: { label: 구조화 데이터 / COBie 전략 }
+      data_responsibility:
+        label: 구조화 데이터 책임 매트릭스
+        help: >
+          운영 주체가 인수할 데이터 그룹마다 한 행씩, 따르는 표준, 생산하는 태스크팀, 기한, 검증 방법을
+          적습니다. 표준은 버전까지 명시합니다(COBie 2.4, COBie 3, HVACie, 또는 발주처 자체 스키마).
+        columns:
+          standard: 표준
+          data_group: 데이터 그룹 / 시트
+          responsible: 담당 태스크팀
+          milestone: 기한
+          validation: 검증 방법
       as_built_process: { label: 준공 검증 절차 }
   risk:
     title: 정보관리 리스크 등록부
@@ -371,6 +382,8 @@ checks:
     fix: "각 태스크팀에 대한 TIDP 행을 추가하거나, 산출물이 없는 팀은 제외하십시오."
   uses_owner_known:
     message: "수행팀 구성에 없는 팀에 BIM 활용이 배정되어 있습니다."
+  data_responsibility_owned:
+    message: "수행팀 구성에 없는 팀에 구조화 데이터 그룹이 배정되어 있습니다."
   software_covers_models:
     message: "모델 분할 구조의 저작 소프트웨어가 기술 스택 목록에 없습니다."
   approval_signed:

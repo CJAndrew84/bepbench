@@ -129,13 +129,23 @@ every optimisation below is an unverifiable claim.
 
 ## Suggested order
 
+Revised October 2026, after practitioner feedback on the first public release: the value of
+a BEP tool lies in the open standards it supports, not in its model viewer. That moves IDS
+to the front and puts the viewer's scaling work on hold.
+
 ```
-6 (measurement)  →  1 (instancing)  →  2 (compression)  →  4 (IDS positioning)  →  3 (streaming)
+4 (IDS)  ·  then, only when a user brings a model past the cap:  6 → 1 → 2 → 3
 ```
 
-**6 → 1 → 2 is the core bundle.** After it the 20,000-element cap works in practice and
-100,000 becomes reachable. Task 4 runs in parallel and is mostly documentation and framing
-rather than code. Task 5 waits for real users.
+**Task 4 comes first.** Its first part is done: one IDS per milestone, every attached model
+checked in its own schema, classes checked against the target schema, and real property
+sets. See [07-standards.md](07-standards.md). bSDD URIs and BCF reports are next.
+
+**Tasks 6 → 1 → 2 → 3 wait for evidence.** They remain the right order if the
+20,000-element cap starts to bite, and the measurements above still hold. Spending the
+largest budget before anyone hits the limit is the mistake task 5 already avoids.
+
+Task 5 still waits for real users.
 
 ---
 

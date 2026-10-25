@@ -590,17 +590,20 @@
     } else if (action === "ids-check") {
       var toast = window.bepToast || function (m) { console.log(m); };
       toast(s("ids_checking", "Checking the model against the plan…"));
+      // Every attached model is checked, each in its own schema: a plan has a
+      // model per discipline, not one model.
       fetch(api("/ids/check"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model_id: activeModel ? activeModel.id : null })
+        body: JSON.stringify({})
       })
         .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); })
         .then(function (result) {
           if (!result.ok) { toast(result.body.error || s("ids_none", "Nothing to check.")); return; }
           var b = result.body;
-          toast((s("ids_result", "{passed} of {total} specifications satisfied")
-            .replace("{passed}", b.passed).replace("{total}", b.specifications)));
+          toast((s("ids_result", "{passed} of {total} specifications satisfied across {models} model(s)")
+            .replace("{passed}", b.passed).replace("{total}", b.specifications)
+            .replace("{models}", (b.models || []).length)));
           console.table(b.results);
         })
         .catch(function () { toast(s("ids_none", "Nothing to check.")); });
@@ -631,6 +634,26 @@
       });
     }
   });
+
+  /* IDS export per milestone: the plan's LOIN table spans several, and a
+     model is delivered against one. The list comes from the table itself. */
+  function fillIdsMilestones() {
+    var host = document.querySelector("[data-menu-ids-milestones]");
+    if (!host) return;
+    fetch(api("/ids/milestones")).then(function (r) { return r.ok ? r.json() : { milestones: [] }; })
+      .then(function (info) {
+        var list = info.milestones || [];
+        host.innerHTML = list.length ? list.map(function (m) {
+          return '<a class="menu-item" href="' + api("/ids?milestone=" + encodeURIComponent(m)) +
+            '">' + esc(m) + "</a>";
+        }).join("") : '<span class="menu-item muted">' +
+          esc(s("ids_no_milestones", "No milestones.")) + "</span>";
+      })
+      .catch(function () { /* the submenu stays empty */ });
+  }
+  fillIdsMilestones();
+  var idsRoot = document.querySelector("[data-ids-milestones-root]");
+  if (idsRoot) idsRoot.addEventListener("mouseenter", fillIdsMilestones);
 
   function fillModelMenus() {
     var modeHost = document.querySelector("[data-menu-modes]");

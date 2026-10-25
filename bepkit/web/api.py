@@ -6,6 +6,8 @@ integration surface for CI checks or a CDE hook that wants a project's score.
 
 from __future__ import annotations
 
+from typing import Any
+
 from flask import Blueprint, jsonify, request
 
 from .. import services
@@ -404,35 +406,61 @@ def model_element(slug: str, model_id: int, guid: str):
 # IDS
 # ---------------------------------------------------------------------------
 
-@api_bp.get("/projects/<slug>/ids")
-def export_ids(slug: str):
-    """The plan's information requirements as a buildingSMART IDS document."""
-    from flask import Response
+def _ids_options(source: Any) -> dict[str, Any]:
+    """The options the CLI's ids export and ids check take, under the same names."""
+    getlist = getattr(source, "getlist", None)
+    versions = getlist("ifc_version") if getlist else source.get("ifc_version")
+    return {
+        "ifc_version": versions or None,
+        "milestone": source.get("milestone"),
+        "default_pset": source.get("default_pset") or None,
+    }
 
-    from ..ids import IdsError, build
+
+@api_bp.get("/projects/<slug>/ids/milestones")
+def ids_milestones(slug: str):
+    """The milestones the plan's level of information need table names."""
+    from ..ids import IdsError
 
     try:
         project = _load(slug)
     except services.ServiceError as exc:
         return _error(str(exc), 404)
     try:
-        result = build(project, services.framework_for(project), project.values())
+        return jsonify(services.ids_milestones(project))
+    except IdsError as exc:
+        return _error(str(exc), 422)
+
+
+@api_bp.get("/projects/<slug>/ids")
+def export_ids(slug: str):
+    """The plan's information requirements as a buildingSMART IDS document."""
+    from flask import Response
+
+    from ..ids import IdsError
+
+    try:
+        project = _load(slug)
+    except services.ServiceError as exc:
+        return _error(str(exc), 404)
+    options = _ids_options(request.args)
+    try:
+        result = services.export_ids(project, **options)
     except IdsError as exc:
         return _error(str(exc), 422)
 
     if request.args.get("report"):
         return jsonify(result.to_dict())
-    from ..models import slugify
-
+    filename = services.ids_filename(project, result.milestone)
     return Response(result.xml, mimetype="application/xml", headers={
-        "Content-Disposition": f'attachment; filename="{slugify(project.name)}.ids"',
+        "Content-Disposition": f'attachment; filename="{filename}"',
     })
 
 
 @api_bp.post("/projects/<slug>/ids/check")
 def check_ids(slug: str):
-    """Validate an attached model against the plan's own requirements."""
-    from ..ids import IdsError, build, validate_against
+    """Validate attached models against the plan's own requirements."""
+    from ..ids import IdsError
 
     try:
         project = _load(slug)
@@ -440,19 +468,11 @@ def check_ids(slug: str):
         return _error(str(exc), 404)
 
     body = request.get_json(silent=True) or {}
-    models = services.list_models(project)
-    if body.get("model_id"):
-        models = [m for m in models if m.id == body["model_id"]]
-    if not models:
-        return _error("attach an IFC model to this plan first", 422)
-
+    model_ids = body.get("model_ids") or ([body["model_id"]] if body.get("model_id") else None)
     try:
-        result = build(project, services.framework_for(project), project.values())
-        report = validate_against(result.xml, models[0].source_path)
+        report = services.check_ids(project, model_ids=model_ids, **_ids_options(body))
     except IdsError as exc:
         return _error(str(exc), 422)
-    report["model"] = models[0].filename
-    report["build"] = result.to_dict()
     return jsonify(report)
 
 

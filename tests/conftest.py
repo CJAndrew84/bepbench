@@ -29,3 +29,12 @@ def project(app):
     from bepkit import services
 
     return services.create_project("Test Plan", "iso19650", client="Acme", reference="T-001")
+
+
+@pytest.fixture(autouse=True)
+def _no_leaked_overrides():
+    """`bep --set` overrides live for the process; never let one test see another's."""
+    from bepkit.settings import clear_overrides
+
+    yield
+    clear_overrides()

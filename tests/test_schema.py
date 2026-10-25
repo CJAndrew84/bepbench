@@ -73,3 +73,31 @@ def test_documented_framework_sizes_match_the_yaml():
     assert stated, "README no longer states the delivery-only count"
     assert int(stated.group(1)) == delivery_only
     assert int(stated.group(2)) == framework.total_fields
+
+
+def test_structured_data_matrix_is_delivery_only_optional_and_translated():
+    """The matrix answers who produces which operator data, in whichever standard."""
+    framework = get_framework("iso19650")
+    field = framework.section_by_id("handover").field_by_id("data_responsibility")
+    assert field.type == "table" and not field.required
+    assert field.stages == ("delivery",)
+    assert {c.id for c in field.columns} >= {"standard", "data_group", "responsible", "milestone"}
+
+    korean = localize(framework, "ko").section_by_id("handover").field_by_id("data_responsibility")
+    assert korean.label == "구조화 데이터 책임 매트릭스"
+    assert {c.label for c in korean.columns} >= {"표준", "담당 태스크팀"}
+
+
+def test_structured_data_owned_by_an_unknown_team_is_flagged():
+    from bepkit.scoring.engine import evaluate
+
+    framework = get_framework("iso19650")
+    values = {
+        "team_roles": {"task_teams": [{"team": "Structures task team"}]},
+        "handover": {"data_responsibility": [
+            {"standard": "COBie 2.4", "data_group": "Component", "responsible": "Nobody",
+             "milestone": "Handover"}]},
+    }
+    assert "data_responsibility_owned" in {i.id for i in evaluate(framework, values).issues}
+    values["handover"]["data_responsibility"][0]["responsible"] = "Structures task team"
+    assert "data_responsibility_owned" not in {i.id for i in evaluate(framework, values).issues}

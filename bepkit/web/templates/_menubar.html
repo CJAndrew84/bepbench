@@ -67,6 +67,10 @@
       <button class="menu-item" type="button" data-action="section-plane">{{ t('menu.section_plane') }}</button>
       <hr>
       <a class="menu-item strong" href="{{ url_for('api.export_ids', slug=project.slug) }}">{{ t('menu.ids_export') }}</a>
+      <div class="menu-sub" data-ids-milestones-root>
+        <span class="menu-item has-sub">{{ t('menu.ids_milestone') }} <span class="chev">›</span></span>
+        <div class="menu submenu" data-menu-ids-milestones></div>
+      </div>
       <button class="menu-item" type="button" data-action="ids-check">{{ t('menu.ids_check') }}</button>
       <hr>
       <button class="menu-item danger" type="button" data-action="remove-model">{{ t('menu.remove_model') }}</button>

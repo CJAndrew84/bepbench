@@ -30,7 +30,7 @@ the plan into a hosted LLM.
 | **Puts the model next to the plan** | Upload an IFC and it renders beside the editor, filtered to the LOD the plan itself declares. Select an element and see its properties next to the requirement this plan places on it. |
 | **Drafts with a local model** | Per-field Draft / Improve / Expand / Critique through Ollama. Nothing leaves the machine; nothing is saved without a click. |
 | **Exports to Word** | A real `.docx` with styled headings, native tables and a TOC field — plus Markdown, HTML and JSON. |
-| **Three frameworks, all in YAML** | ISO 19650-2 (16 sections, 68 fields), NBIMS-US v4, and a Lite template. A house standard is a file, not a fork. |
+| **Three frameworks, all in YAML** | ISO 19650-2 (16 sections, 69 fields), NBIMS-US v4, and a Lite template. A house standard is a file, not a fork. |
 | **English and Korean**, light and dark, full CLI for scripting and CI. | |
 
 ### Demo video
@@ -106,14 +106,20 @@ rather than re-authoring keeps them from drifting apart.
 ![IDS export and check](docs/demo/img/ids.png)
 
 ```bash
-bep ids export <plan> -o plan.ids          # IDS 1.0, XSD-valid
-bep ids check  <plan> model.ifc            # validate a model against the plan
-bep ids check  <plan> --fail-on-error      # a CI gate
+bep ids export <plan> -o plan.ids          # IDS 1.0, XSD-valid, every milestone
+bep ids export <plan> --split -o ids/      # one .ids per milestone in the LOIN table
+bep ids check  <plan>                      # every attached model, each in its own schema
+bep ids check  <plan> --milestone 3 --fail-on-error --json   # a CI gate
 ```
 
-A row that names no IFC class is **reported, never guessed** into a silent false positive;
-inference from the element name is a convenience and says so. Set the *IFC Class* column in
-the LOIN table to be certain.
+A plan's LOIN table spans several milestones, so a Stage 3 model is checked against Stage 3
+rows only. A plan has a model per discipline, so the check covers each one.
+
+A row that names no IFC class, or a class the target schema lacks, is **reported, never
+guessed** into a silent false positive; inference from the element name is a convenience and
+says so. Set the *IFC Class* column in the LOIN table to be certain, and write properties as
+`Pset_DoorCommon.FireRating` to require them in the set authoring tools actually use.
+How BEP, LOIN, IDS, IFC and MVD relate is in [docs/07-standards.md](docs/07-standards.md).
 
 ---
 
@@ -127,9 +133,9 @@ bep new "Riverside Phase 2" -f iso19650 --stage pre_appointment
 bep score <plan> --stage delivery    # what it would score as a delivery BEP
 ```
 
-In the ISO framework 22 of 68 fields are marked delivery-only — TIDPs, mobilisation,
+In the ISO framework 23 of 69 fields are marked delivery-only — TIDPs, mobilisation,
 confirmed CDE rules, training. The same answers score **97.8** as a pre-appointment BEP and
-**66.6** as a delivery BEP, which is the honest reading of both.
+**66.1** as a delivery BEP, which is the honest reading of both.
 
 ---
 
@@ -162,11 +168,14 @@ bep score <plan> --require-ready --fail-under 70    # a CI gate
 bep assist <plan> risk.risk_process --mode draft --apply
 bep ifc import <plan> model.ifc
 bep ifc inspect model.ifc
-bep ids export <plan> -o plan.ids
+bep ids milestones <plan>
+bep ids export <plan> -o plan.ids --milestone 4 --ifc-version IFC4X3_ADD2
+bep ids check <plan> --model-id 2 --json
 bep diff <plan>
 bep export <plan> --format docx --out BEP.docx
 bep snapshot <plan> --label "Issued for Stage 3"
 bep config                                # effective settings and their source
+bep --set ids.data_type=IFCTEXT ids export <plan>   # any setting, for one run
 bep --lang ko framework iso19650          # Korean labels in the terminal
 ```
 
@@ -186,6 +195,7 @@ POST   /api/projects                         GET  /api/projects/<slug>
 PUT    /api/projects/<slug>/values           GET  /api/projects/<slug>/score
 POST   /api/projects/<slug>/assist           GET  /api/projects/<slug>/export?format=
 GET    /api/projects/<slug>/ids              POST /api/projects/<slug>/ids/check
+GET    /api/projects/<slug>/ids/milestones
 GET    /api/projects/<slug>/diff             GET  /api/projects/<slug>/models
 POST   /api/projects/<slug>/models           GET  /api/projects/<slug>/models/<id>/index
 GET    /api/projects/<slug>/models/<id>/buffer
@@ -209,7 +219,8 @@ ship in `bepkit/config_files/defaults.json`; overrides are deep-merged from `$BE
 }
 ```
 
-`bep config` prints what is in force and where it came from. Frameworks are YAML: drop a
+`bep config` prints what is in force and where it came from, and `bep --set key=value`
+overrides any of it for one run. Frameworks are YAML: drop a
 file into `bepkit/frameworks/`, or point `BEP_FRAMEWORK_PATH` at your own directory. See
 [docs/04-configuration.md](docs/04-configuration.md).
 
@@ -259,6 +270,7 @@ bepkit/
 | [Configuration](docs/04-configuration.md) | The JSON settings, and writing your own framework |
 | [Deployment](docs/05-deployment.md) | Fly.io, Docker, operations |
 | [Roadmap](docs/06-roadmap.md) | Measured scaling limits and what to build next |
+| [Standards](docs/07-standards.md) | How BEP, LOIN, IDS, IFC and MVD relate, and where this tool draws its lines |
 | [Progress](docs/progress.md) | What exists, what was measured, what is known to be missing |
 
 ## Tests

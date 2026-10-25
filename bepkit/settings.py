@@ -7,6 +7,7 @@ over it, resolved in this order:
 1. ``$BEP_CONFIG`` — an explicit path (file or directory of ``*.json``)
 2. ``./bep.config.json`` in the working directory
 3. ``<data dir>/config.json`` — the deployed instance's own settings
+4. runtime overrides — ``bep --set key=value``, applied last
 """
 
 from __future__ import annotations
@@ -19,6 +20,12 @@ from pathlib import Path
 from typing import Any
 
 DEFAULTS_PATH = Path(__file__).resolve().parent / "config_files" / "defaults.json"
+
+# Overrides supplied for this process only, e.g. by ``bep --set``, keyed by
+# dotted path. Applied last, and they replace the value at that path rather
+# than merging into it, so ``--set ids.sources.iso19650.classification={}``
+# really empties it.
+_runtime: dict[str, Any] = {}
 
 
 def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
@@ -71,7 +78,20 @@ def settings() -> dict[str, Any]:
     merged = _read(DEFAULTS_PATH)
     for path in override_paths():
         merged = _deep_merge(merged, _read(path))
+    for path, value in _runtime.items():
+        _assign(merged, path, copy.deepcopy(value))
     return merged
+
+
+def _assign(tree: dict[str, Any], path: str, value: Any) -> None:
+    node = tree
+    parts = path.split(".")
+    for part in parts[:-1]:
+        child = node.get(part)
+        child = dict(child) if isinstance(child, dict) else {}
+        node[part] = child
+        node = child
+    node[parts[-1]] = value
 
 
 def get(path: str, default: Any = None) -> Any:
@@ -86,3 +106,34 @@ def get(path: str, default: Any = None) -> Any:
 
 def reload() -> None:
     settings.cache_clear()
+
+
+def parse_assignment(text: str) -> tuple[str, Any]:
+    """``"ids.data_type=IFCTEXT"`` -> ``("ids.data_type", "IFCTEXT")``.
+
+    The value is read as JSON when it parses (numbers, booleans, lists, objects)
+    and as a plain string otherwise, so ``ids.min_occurs=1`` is an int and
+    ``ai.model=qwen3:8b`` stays a string.
+    """
+    if "=" not in text:
+        raise ValueError(f"'{text}' is not a key=value assignment")
+    key, raw = text.split("=", 1)
+    key = key.strip()
+    if not key:
+        raise ValueError(f"'{text}' has no key")
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        value = raw
+    return key, value
+
+
+def override(path: str, value: Any) -> None:
+    """Replace the value at a dotted settings path for the rest of this process."""
+    _runtime[path] = value
+    reload()
+
+
+def clear_overrides() -> None:
+    _runtime.clear()
+    reload()

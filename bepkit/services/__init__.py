@@ -1,4 +1,12 @@
 from .diff import compare, compare_snapshot_to_current, compare_snapshots
+from .ids import (
+    check_ids,
+    export_ids,
+    export_ids_split,
+    file_schema,
+    ids_filename,
+    ids_milestones,
+)
 from .models import (
     attach_model,
     delete_model,

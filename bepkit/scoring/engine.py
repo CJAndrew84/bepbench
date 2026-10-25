@@ -32,8 +32,12 @@ DEFAULT_BANDS = [
 
 # Overall score at or above this, with no blockers, means the plan can be issued.
 # Both thresholds are site-configurable in the JSON settings.
-READY_SCORE = float(setting("scoring.ready_score", 65.0))
-READY_REQUIRED_COVERAGE = float(setting("scoring.ready_required_coverage", 90.0))
+def _ready_score() -> float:
+    return float(setting("scoring.ready_score", 65.0))
+
+
+def _ready_required_coverage() -> float:
+    return float(setting("scoring.ready_required_coverage", 90.0))
 
 
 @dataclass
@@ -120,8 +124,8 @@ class ScoreReport:
     def is_ready(self) -> bool:
         return (
             not self.blockers
-            and self.score >= READY_SCORE
-            and self.required_coverage >= READY_REQUIRED_COVERAGE
+            and self.score >= _ready_score()
+            and self.required_coverage >= _ready_required_coverage()
         )
 
     def issue_counts(self) -> dict[str, int]:

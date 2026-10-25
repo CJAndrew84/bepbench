@@ -62,8 +62,8 @@ stay canonical, so a plan means the same thing in both languages.
 
 ### Appointment stages
 
-22 of the 68 ISO fields are marked delivery-only (TIDPs, mobilisation, confirmed CDE
-rules, training). The same answers score **97.8** as a pre-appointment BEP and **66.6** as
+23 of the 69 ISO fields are marked delivery-only (TIDPs, mobilisation, confirmed CDE
+rules, training). The same answers score **97.8** as a pre-appointment BEP and **66.1** as
 a delivery BEP — the honest reading of both.
 
 ### buildingSMART IDS
@@ -194,7 +194,7 @@ Stated plainly so they are not rediscovered as surprises.
 bep demo                          # worked example, ~87/100
 bep ifc import <plan> docs/demo/Duplex_A.ifc
 bep serve                         # http://127.0.0.1:8080
-pytest -q                         # 126 tests
+pytest -q                         # 167 tests
 ```
 
 ---

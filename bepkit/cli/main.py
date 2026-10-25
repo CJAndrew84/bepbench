@@ -20,6 +20,7 @@ from ..i18n import LOCALES
 from ..models import Project, slugify
 from ..schema import available_frameworks, get_framework
 from ..schema.locale import localize
+from ..schema.models import STAGES
 from ..services import ServiceError
 from .. import services
 
@@ -89,10 +90,21 @@ pass_ctx = click.make_pass_decorator(Context)
 @click.option("--lang", default=lambda: os.environ.get("BEP_LANG", "en"),
               type=click.Choice(sorted(LOCALES)), show_default="en",
               help="Language for framework labels in the output.")
+@click.option("--set", "assignments", multiple=True, metavar="KEY=VALUE",
+              help="Override any setting for this run, e.g. --set ids.data_type=IFCTEXT. "
+                   "Repeatable; values are read as JSON when they parse.")
 @click.version_option(package_name="bepbench", prog_name="bep", message="%(prog)s %(version)s")
 @click.pass_context
-def cli(ctx: click.Context, lang: str) -> None:
+def cli(ctx: click.Context, lang: str, assignments: tuple[str, ...]) -> None:
     """BEP Bench — author, score and export BIM Execution Plans."""
+    from ..settings import override, parse_assignment
+
+    for assignment in assignments:
+        try:
+            key, value = parse_assignment(assignment)
+        except ValueError as exc:
+            raise click.BadParameter(str(exc), param_hint="--set") from exc
+        override(key, value)
     ctx.obj = Context(lang)
 
 
@@ -153,7 +165,7 @@ def show_framework(ctx: Context, framework_id: str) -> None:
 @click.option("--client", default="", help="Appointing party.")
 @click.option("--reference", default="", help="Project reference / number.")
 @click.option("--owner", default="", help="Information manager.")
-@click.option("--stage", type=click.Choice(["delivery", "pre_appointment"]),
+@click.option("--stage", type=click.Choice(STAGES),
               default="delivery", show_default=True,
               help="Which ISO 19650-2 appointment stage this plan is written for.")
 @pass_ctx
@@ -298,7 +310,7 @@ def clear_field(ctx: Context, slug: str, path: str) -> None:
 @click.option("--require-ready", is_flag=True,
               help="Exit non-zero unless the plan passes the issue gate.")
 @click.option("--issues/--no-issues", default=True, help="List open issues.")
-@click.option("--stage", type=click.Choice(["delivery", "pre_appointment"]), default=None,
+@click.option("--stage", type=click.Choice(STAGES), default=None,
               help="Score against this stage instead of the plan's own.")
 @pass_ctx
 def score_project(ctx: Context, slug: str, as_json: bool, fail_under: float | None,
@@ -628,12 +640,10 @@ def show_config(ctx: Context, as_json: bool) -> None:
     else:
         click.secho("  no overrides (set BEP_CONFIG or add ./bep.config.json)", dim=True)
     click.echo()
-    for key in ("ai.provider", "ai.base_url", "ai.model", "viewer.enabled",
-                "viewer.default_mode", "viewer.lod.default", "ui.split_ratio",
-                "scoring.ready_score"):
-        from ..settings import get as setting
+    from ..settings import get as setting
 
-        click.echo(f"  {key.ljust(24)} {setting(key)}")
+    for key in setting("cli.config_summary_keys", []) or []:
+        click.echo(f"  {key.ljust(28)} {setting(key)}")
     click.echo()
 
 
@@ -646,75 +656,165 @@ def ids_group() -> None:
     """Export the plan's information requirements as buildingSMART IDS."""
 
 
-@ids_group.command("export")
+def _ids_options(func):
+    """The options ids export and ids check share, so a pipeline sets them once."""
+    func = click.option("--default-pset", default=None, metavar="NAME",
+                        help="Property set for properties written without one "
+                             "[ids.default_pset].")(func)
+    func = click.option("--milestone", default=None, metavar="VALUE",
+                        help="Only the rows for this milestone; see 'bep ids milestones' "
+                             "[ids.milestone].")(func)
+    func = click.option("--ifc-version", multiple=True, metavar="SCHEMA",
+                        help="Target schema, repeatable: IFC2X3, IFC4, IFC4X3_ADD2 "
+                             "[ids.ifc_version].")(func)
+    func = click.option("--json", "as_json", is_flag=True, help="Machine-readable output.")(func)
+    return func
+
+
+def _echo_build_notes(build: dict[str, Any], indent: str = "  ") -> None:
+    """The same notices for an export and a check, so neither hides a skipped row."""
+    for item in build.get("inferred", []):
+        click.secho(f"{indent}row {item['row']}: {item['element']} — {item['reason']}", fg="yellow")
+    for item in build.get("narrowed", []):
+        click.secho(f"{indent}row {item['row']}: {item['element']} — {item['reason']}", fg="yellow")
+    for item in build.get("skipped", []):
+        click.secho(f"{indent}row {item['row']}: {item['element']} — {item['reason']}", fg="red")
+    if build.get("inferred"):
+        click.secho(f"{indent}inferred classes are a guess; set the IFC Class column to be sure",
+                    dim=True)
+    count = build.get("default_pset_properties") or 0
+    if count:
+        noun = "property names" if count == 1 else "properties name"
+        click.secho(f"{indent}{count} {noun} no property set; write Pset_Name.Property "
+                    "to require a standard one", dim=True)
+
+
+@ids_group.command("milestones")
 @click.argument("slug")
-@click.option("--out", "-o", type=click.Path(dir_okay=False), help="Write to a file.")
-@click.option("--ifc-version", multiple=True, help="Target schema, repeatable (IFC4, IFC2X3).")
+@click.option("--json", "as_json", is_flag=True, help="Machine-readable output.")
 @pass_ctx
-def ids_export(ctx: Context, slug: str, out: str | None, ifc_version: tuple[str, ...]) -> None:
-    """Turn the level of information need table into an .ids file."""
-    from ..ids import IdsError, build
+def ids_milestones(ctx: Context, slug: str, as_json: bool) -> None:
+    """List the milestones the level of information need table names."""
+    from ..ids import IdsError
 
     project = _project(slug)
-    framework = ctx.framework(project)
     try:
-        result = build(project, framework, project.values(),
-                       ifc_version=list(ifc_version) or None)
+        info = services.ids_milestones(project)
+    except IdsError as exc:
+        fail(str(exc))
+    if as_json:
+        click.echo(json.dumps(info, indent=2, ensure_ascii=False))
+        return
+    if not info["milestones"]:
+        click.secho(f"no milestones in the '{info['column']}' column", dim=True)
+        return
+    for milestone in info["milestones"]:
+        click.echo(milestone)
+
+
+@ids_group.command("export")
+@click.argument("slug")
+@click.option("--out", "-o", type=click.Path(), help="Write to a file (a directory with --split).")
+@click.option("--split", is_flag=True,
+              help="One .ids per milestone, named by ids.split_filename, into the --out directory.")
+@_ids_options
+@pass_ctx
+def ids_export(ctx: Context, slug: str, out: str | None, split: bool, as_json: bool,
+               ifc_version: tuple[str, ...], milestone: str | None,
+               default_pset: str | None) -> None:
+    """Turn the level of information need table into an .ids file."""
+    from ..ids import IdsError
+
+    project = _project(slug)
+    options = {"ifc_version": list(ifc_version) or None, "default_pset": default_pset}
+    try:
+        if split:
+            if milestone:
+                fail("--split writes every milestone; drop --milestone")
+            if not out:
+                fail("--split needs --out <directory>")
+            parts = services.export_ids_split(project, **options)
+        else:
+            parts = [(None, services.export_ids(project, milestone=milestone, **options))]
     except IdsError as exc:
         fail(str(exc))
 
-    if out:
+    written: list[dict[str, Any]] = []
+    if split:
+        directory = Path(out)
+        directory.mkdir(parents=True, exist_ok=True)
+        for name, result in parts:
+            path = directory / services.ids_filename(project, name)
+            path.write_text(result.xml, encoding="utf-8")
+            written.append({"path": str(path), **result.to_dict()})
+    elif out:
+        result = parts[0][1]
         Path(out).write_text(result.xml, encoding="utf-8")
-        click.secho(f"wrote {out} — {result.specifications} specification(s)", fg="green")
+        written.append({"path": out, **result.to_dict()})
     else:
-        click.echo(result.xml)
+        result = parts[0][1]
+        if as_json:
+            click.echo(json.dumps({**result.to_dict(), "xml": result.xml},
+                                  indent=2, ensure_ascii=False))
+        else:
+            click.echo(result.xml)
         return
 
-    for item in result.inferred:
-        click.secho(f"  row {item.row}: {item.element} — {item.reason}", fg="yellow")
-    for item in result.skipped:
-        click.secho(f"  row {item.row}: {item.element} — {item.reason}", fg="red")
-    if result.inferred:
-        click.secho("  inferred classes are a guess; set the IFC Class column to be sure",
-                    dim=True)
+    if as_json:
+        click.echo(json.dumps({"files": written}, indent=2, ensure_ascii=False))
+        return
+    for item in written:
+        label = f" (milestone {item['milestone']})" if item["milestone"] else ""
+        click.secho(f"wrote {item['path']} — {item['specifications']} specification(s){label}",
+                    fg="green")
+        _echo_build_notes(item)
 
 
 @ids_group.command("check")
 @click.argument("slug")
 @click.argument("model", type=click.Path(exists=True, dir_okay=False), required=False)
-@click.option("--model-id", type=int, help="Check an attached model instead of a file.")
+@click.option("--model-id", type=int, multiple=True,
+              help="Check this attached model; repeatable. Default: every attached model.")
 @click.option("--fail-on-error", is_flag=True, help="Exit non-zero if any specification fails.")
+@_ids_options
 @pass_ctx
-def ids_check(ctx: Context, slug: str, model: str | None, model_id: int | None,
-              fail_on_error: bool) -> None:
-    """Validate an IFC against the requirements the plan states."""
-    from ..ids import IdsError, build, validate_against
+def ids_check(ctx: Context, slug: str, model: str | None, model_id: tuple[int, ...],
+              fail_on_error: bool, as_json: bool, ifc_version: tuple[str, ...],
+              milestone: str | None, default_pset: str | None) -> None:
+    """Validate IFC models against the requirements the plan states."""
+    from ..ids import IdsError
 
     project = _project(slug)
-    framework = ctx.framework(project)
-
-    if not model:
-        models = services.list_models(project)
-        if model_id is not None:
-            models = [m for m in models if m.id == model_id]
-        if not models:
-            fail("no IFC given and none attached to this plan")
-        model = models[0].source_path
-
     try:
-        result = build(project, framework, project.values())
-        report = validate_against(result.xml, model)
+        report = services.check_ids(project, model_ids=list(model_id) or None,
+                                    model_path=model, ifc_version=list(ifc_version) or None,
+                                    milestone=milestone, default_pset=default_pset)
     except IdsError as exc:
         fail(str(exc))
 
-    echo_header(f"{project.name} — IDS check against {Path(model).name}")
-    for spec in report["results"]:
-        mark = click.style("PASS", fg="green") if spec["passed"] else click.style("FAIL", fg="red")
-        click.echo(f"  {mark}  {spec['identifier']}  {spec['name'][:40].ljust(40)}"
-                   + click.style(f"{spec['applicable']} applicable, {spec['failures']} failing",
-                                 dim=True))
-    click.echo()
-    click.echo(f"  {report['passed']}/{report['specifications']} specifications satisfied")
+    if as_json:
+        click.echo(json.dumps(report, indent=2, ensure_ascii=False))
+    else:
+        scope = f", milestone {report['milestone']}" if report["milestone"] else ""
+        echo_header(f"{project.name} — IDS check{scope}")
+        for entry in report["models"]:
+            click.secho(f"  {entry['model']}  ({entry['schema'] or 'unknown schema'}, "
+                        f"checked as {', '.join(entry['ifc_version'])})", bold=True)
+            if entry.get("warning"):
+                click.secho(f"    {entry['warning']}", fg="yellow")
+            if entry.get("error"):
+                click.secho(f"    {entry['error']}", fg="red")
+                continue
+            _echo_build_notes(entry.get("build", {}), indent="    ")
+            for spec in entry["results"]:
+                mark = (click.style("PASS", fg="green") if spec["passed"]
+                        else click.style("FAIL", fg="red"))
+                click.echo(f"    {mark}  {spec['identifier']}  {spec['name'][:40].ljust(40)}"
+                           + click.style(f"{spec['applicable']} applicable, "
+                                         f"{spec['failures']} failing", dim=True))
+        click.echo()
+        click.echo(f"  {report['passed']}/{report['specifications']} specifications satisfied"
+                   f" across {len(report['models'])} model(s)")
     if fail_on_error and report["failed"]:
         sys.exit(4)
 

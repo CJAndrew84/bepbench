@@ -5,9 +5,17 @@ from .builder import (
     build,
     infer_ifc_class,
     loin_source,
+    milestone_column,
+    milestones,
+    normalise_schema,
+    resolve_versions,
+    schemas_defining,
     split_properties,
+    split_qualified,
     validate_against,
 )
 
 __all__ = ["build", "validate_against", "loin_source", "infer_ifc_class",
-           "split_properties", "BuildResult", "IdsError", "IFCTESTER_AVAILABLE"]
+           "split_properties", "split_qualified", "milestones", "milestone_column",
+           "normalise_schema", "resolve_versions", "schemas_defining",
+           "BuildResult", "IdsError", "IFCTESTER_AVAILABLE"]

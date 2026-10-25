@@ -409,6 +409,16 @@ DEMO_VALUES: dict[str, object] = {
         "intermediate would lose the operator's own maintenance regime fields. The mapping from model "
         "parameters to the AIR schema is maintained by the information manager."
     ),
+    "handover.data_responsibility": [
+        {"standard": "CTA-AIR-002", "data_group": "Asset register and tags", "responsible": "Architecture task team",
+         "milestone": "Data drop 1", "validation": "Automated schema validation"},
+        {"standard": "CTA-AIR-002", "data_group": "MEP systems and maintenance regimes",
+         "responsible": "Building services task team", "milestone": "Data drop 2",
+         "validation": "Automated schema validation"},
+        {"standard": "CTA-AIR-002", "data_group": "Structural elements and inspection data",
+         "responsible": "Structures task team", "milestone": "Data drop 3",
+         "validation": "Automated schema validation"},
+    ],
 
     "risk.risk_register": [
         {"risk": "Possession dates move and compress the coordination cycle", "impact": "High",

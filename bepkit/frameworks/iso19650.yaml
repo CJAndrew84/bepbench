@@ -1,6 +1,6 @@
 id: iso19650
 name: ISO 19650-2 BIM Execution Plan
-version: "1.2"
+version: "1.3"
 reference: "BS EN ISO 19650-2:2018 — Delivery phase of the assets"
 description: >
   Full delivery-team BIM Execution Plan aligned to BS EN ISO 19650-2 and the UK BIM
@@ -618,6 +618,24 @@ sections:
         type: markdown
         quality: { min_words: 40 }
         help: COBie version and sheets, or the alternative structured schema agreed with the operator.
+      - id: data_responsibility
+        stages: [delivery]
+        label: Structured Data Responsibility Matrix
+        type: table
+        weight: 0.8
+        quality: { min_rows: 2 }
+        reference: "COBie / AIR schema"
+        help: >
+          One row per data group the operator receives: the standard it follows, which task
+          team produces it, by when, and how it is checked. Name the standard and its version
+          (COBie 2.4, COBie 3, HVACie, or the operator's own schema), so the matrix holds
+          whichever one the appointment uses.
+        columns:
+          - { id: standard, label: Standard, type: text, required: true, width: "150px", placeholder: "COBie 2.4" }
+          - { id: data_group, label: Data Group / Sheet, type: text, required: true, placeholder: "Component" }
+          - { id: responsible, label: Responsible Task Team, type: text, required: true }
+          - { id: milestone, label: Due, type: text, required: true, width: "130px" }
+          - { id: validation, label: Validation, type: text }
       - id: as_built_process
         stages: [delivery]
         label: As-Built Verification Process
@@ -800,6 +818,17 @@ checks:
     against_column: team
     severity: minor
     message: "A BIM use is assigned to a team that is not listed in the delivery team structure."
+
+  - id: data_responsibility_owned
+    rule: values_subset_of
+    section: handover
+    field: data_responsibility
+    column: responsible
+    against_section: team_roles
+    against_field: task_teams
+    against_column: team
+    severity: minor
+    message: "A structured data group is assigned to a team that is not listed in the delivery team structure."
 
   - id: software_covers_models
     rule: values_subset_of

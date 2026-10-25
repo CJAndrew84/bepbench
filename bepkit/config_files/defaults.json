@@ -254,12 +254,38 @@
     "presence_floor": 0.35
   },
   "ids": {
-    "_comment": "Export of the plan's level-of-information-need table as a buildingSMART IDS 1.0 document. 'sources' says which table holds it per framework; 'class_hints' maps words in an element name onto an IFC class when the author has not stated one.",
+    "_comment": "Export of the plan's level-of-information-need table as a buildingSMART IDS 1.0 document, and the check of attached models against it. Every key can be overridden per run with bep --set ids.<key>=<value>; the common ones also have their own ids export / ids check option.",
     "ifc_version": [
       "IFC2X3",
       "IFC4"
     ],
+    "ifc_version_from_model": true,
+    "_ifc_version_comment": "ifc_version is the target schema list for an export. When a model is checked and ifc_version_from_model is true, the model's own schema is the target instead. schema_aliases maps what a file header says onto the IDS schema name.",
+    "schema_aliases": {
+      "IFC4X3": "IFC4X3_ADD2",
+      "IFC4X3_ADD1": "IFC4X3_ADD2",
+      "IFC4X3_TC1": "IFC4X3_ADD2"
+    },
+    "milestone": "",
+    "_milestone_comment": "Empty exports every row of the table as one IDS. A value keeps only the rows whose milestone column (sources.<framework>.columns.stage) equals it, so a Stage 3 model is not checked against Stage 4 requirements.",
+    "split_filename": "{slug}-{milestone}.ids",
+    "filename": "{slug}.ids",
     "default_pset": "BEP_Requirements",
+    "pset_separator": ".",
+    "_pset_comment": "A property written as Pset_DoorCommon.FireRating in the table is required in that property set. One written without a set goes into default_pset.",
+    "property_split": "[,;/]| and ",
+    "data_type": "IFCLABEL",
+    "required_attributes": [
+      "Name"
+    ],
+    "min_occurs": 0,
+    "max_occurs": "unbounded",
+    "identifier_format": "LOIN-{index:03d}",
+    "title_format": "{project} — Level of Information Need",
+    "description_format": "Generated from the BIM Execution Plan ({framework}).",
+    "document_version": "1.0",
+    "classification_split": "[—–\\-,(]",
+    "classification_max_length": 60,
     "author_domain": "example.com",
     "sources": {
       "iso19650": {
@@ -272,6 +298,10 @@
           "stage": "stage",
           "geometry": "geometry",
           "alphanumeric": "alphanumeric"
+        },
+        "classification": {
+          "section": "standards_methods",
+          "field": "classification"
         }
       },
       "nbims_us": {
@@ -283,6 +313,10 @@
           "lod": "lod",
           "stage": "phase",
           "alphanumeric": "notes"
+        },
+        "classification": {
+          "section": "model_standards",
+          "field": "classification"
         }
       }
     },
@@ -347,5 +381,22 @@
     "_comment": "HTTP basic authentication. Off unless both user and password are set, here or via BEP_AUTH_USER / BEP_AUTH_PASSWORD. Needed for any deployment reachable from outside your own machine: the app has no other access control.",
     "user": "",
     "password": ""
+  },
+  "cli": {
+    "_comment": "What bep config prints in its summary. Any dotted settings path may be listed.",
+    "config_summary_keys": [
+      "ai.provider",
+      "ai.base_url",
+      "ai.model",
+      "viewer.enabled",
+      "viewer.default_mode",
+      "viewer.lod.default",
+      "ui.split_ratio",
+      "scoring.ready_score",
+      "ids.ifc_version",
+      "ids.ifc_version_from_model",
+      "ids.milestone",
+      "ids.default_pset"
+    ]
   }
 }

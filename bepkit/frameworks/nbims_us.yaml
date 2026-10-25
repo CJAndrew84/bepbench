@@ -5,7 +5,8 @@ reference: "NBIMS-US v4 Project BIM Execution Planning Standard; Penn State BIM 
 description: >
   US practice BEP following the NBIMS-US v4 clause structure and the Penn State
   four-step planning procedure: identify BIM uses, map the process, define information
-  exchanges, then build the supporting infrastructure.
+  exchanges, then build the supporting infrastructure. It follows the planning clauses
+  only, and makes no claim about COBie V3 conformance or model conformance to NBIMS.
 
 maturity_bands:
   - { min: 0,  label: "Initial",   note: "Placeholder document." }

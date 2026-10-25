@@ -6,7 +6,7 @@ Notes gathered before designing this tool, with what each finding implied for th
 
 | Source | What it fixes | Used here |
 | --- | --- | --- |
-| **BS EN ISO 19650-2:2018** | The delivery-phase information management process: EIR → BEP → MIDP/TIDP, the CDE states, and the pre/post-appointment split. | The `iso19650` framework: 16 sections, 68 fields, mapped clause by clause. |
+| **BS EN ISO 19650-2:2018** | The delivery-phase information management process: EIR → BEP → MIDP/TIDP, the CDE states, and the pre/post-appointment split. | The `iso19650` framework: 16 sections, 69 fields, mapped clause by clause. |
 | **UK BIM Framework guidance (Part 2)** and the CDBB *Pre-appointment and Delivery Team's BEP Guidance* | What an appointing party actually expects to read, and the container naming convention. | Section intents, the naming-convention field, and the status/revision code table. |
 | **NBIMS-US v4 Project BIM Execution Planning Standard** | A twelve-clause US structure: metadata, project reference, contacts, roles, BIM uses, process maps, information exchanges, collaboration, quality, technology, model federation and standards, risk register. | The `nbims_us` framework. |
 | **Penn State BIM Project Execution Planning Guide v2.2** | The four-step procedure: identify high-value BIM uses, map the process, define information exchanges, then build the supporting infrastructure. | The ordering and weighting of the NBIMS framework; the "value vs capability vs proceed" columns on the BIM use table. |
